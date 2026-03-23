@@ -81,58 +81,24 @@ jobs:
       #   with:
       #     subject-path: bin/verify-loop_*
 
-      - name: Update Homebrew formula
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        run: |
-          [ -z "${HOMEBREW_TAP_TOKEN}" ] && echo "HOMEBREW_TAP_TOKEN not set, skipping" && exit 0
-          VERSION=${{ github.ref_name }}
-          VER=${VERSION#v}
-          SHA_DARWIN_ARM64=$(sha256sum bin/verify-loop_darwin_arm64 | awk '{print $1}')
-          SHA_DARWIN_AMD64=$(sha256sum bin/verify-loop_darwin_amd64 | awk '{print $1}')
-          SHA_LINUX_AMD64=$(sha256sum bin/verify-loop_linux_amd64 | awk '{print $1}')
-          SHA_LINUX_ARM64=$(sha256sum bin/verify-loop_linux_arm64 | awk '{print $1}')
-          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/agusrdz/homebrew-tap.git tap
-          cat > tap/Formula/verify-loop.rb << FORMULA
-          class VerifyLoop < Formula
-            desc "PostToolUse/Write hook for static analysis feedback in Claude Code"
-            homepage "https://github.com/agusrdz/verify-loop"
-            version "${VER}"
-
-            on_macos do
-              if Hardware::CPU.arm?
-                url "https://github.com/agusrdz/verify-loop/releases/download/${VERSION}/verify-loop_darwin_arm64"
-                sha256 "${SHA_DARWIN_ARM64}"
-              else
-                url "https://github.com/agusrdz/verify-loop/releases/download/${VERSION}/verify-loop_darwin_amd64"
-                sha256 "${SHA_DARWIN_AMD64}"
-              end
-            end
-
-            on_linux do
-              if Hardware::CPU.arm?
-                url "https://github.com/agusrdz/verify-loop/releases/download/${VERSION}/verify-loop_linux_arm64"
-                sha256 "${SHA_LINUX_ARM64}"
-              else
-                url "https://github.com/agusrdz/verify-loop/releases/download/${VERSION}/verify-loop_linux_amd64"
-                sha256 "${SHA_LINUX_AMD64}"
-              end
-            end
-
-            def install
-              binary = Dir["verify-loop_*"].first
-              chmod 0755, binary
-              bin.install binary => "verify-loop"
-            end
-
-            test do
-              assert_match version.to_s, shell_output("#{bin}/verify-loop --version")
-            end
-          end
-          FORMULA
-          cd tap
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/verify-loop.rb
-          git commit -m "verify-loop ${VERSION}"
-          git push
+      # - name: Update Homebrew formula
+      #   env:
+      #     HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      #   run: |
+      #     [ -z "${HOMEBREW_TAP_TOKEN}" ] && echo "HOMEBREW_TAP_TOKEN not set, skipping" && exit 0
+      #     VERSION=${{ github.ref_name }}
+      #     VER=${VERSION#v}
+      #     SHA_DARWIN_ARM64=$(sha256sum bin/verify-loop_darwin_arm64 | awk '{print $1}')
+      #     SHA_DARWIN_AMD64=$(sha256sum bin/verify-loop_darwin_amd64 | awk '{print $1}')
+      #     SHA_LINUX_AMD64=$(sha256sum bin/verify-loop_linux_amd64 | awk '{print $1}')
+      #     SHA_LINUX_ARM64=$(sha256sum bin/verify-loop_linux_arm64 | awk '{print $1}')
+      #     git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/agusrdz/homebrew-tap.git tap
+      #     cat > tap/Formula/verify-loop.rb << FORMULA
+      #     ...
+      #     FORMULA
+      #     cd tap
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "github-actions[bot]@users.noreply.github.com"
+      #     git add Formula/verify-loop.rb
+      #     git commit -m "verify-loop ${VERSION}"
+      #     git push
