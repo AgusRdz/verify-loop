@@ -102,13 +102,19 @@ func Uninstall() {
 
 	before := len(postToolUse)
 	postToolUse = removeOurEntries(postToolUse)
-	hooksMap["PostToolUse"] = postToolUse
-	settings["hooks"] = hooksMap
 
 	if len(postToolUse) == before {
 		fmt.Println("no hook found")
 		return
 	}
+
+	// If empty after removal, set to empty array (not null) or delete the key.
+	if len(postToolUse) == 0 {
+		hooksMap["PostToolUse"] = []interface{}{}
+	} else {
+		hooksMap["PostToolUse"] = postToolUse
+	}
+	settings["hooks"] = hooksMap
 
 	if err := saveSettings(settings); err != nil {
 		fmt.Fprintf(os.Stderr, "verify-loop: failed to write settings: %v\n", err)
