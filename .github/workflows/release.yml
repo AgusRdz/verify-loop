@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: write
-  id-token: write
-  attestations: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -78,10 +76,10 @@ jobs:
             bin/verify-loop_windows_amd64.exe
             bin/checksums.txt
 
-      - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
-        with:
-          subject-path: bin/verify-loop_*
+      # - name: Attest build provenance
+      #   uses: actions/attest-build-provenance@v2
+      #   with:
+      #     subject-path: bin/verify-loop_*
 
       - name: Update Homebrew formula
         env:
