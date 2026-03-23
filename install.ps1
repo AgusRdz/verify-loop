@@ -30,11 +30,22 @@ Invoke-WebRequest -Uri $Url -OutFile $Destination
 
 Write-Host ""
 Write-Host "Installed: $Destination"
+
+# Add to User PATH (persistent across sessions)
+$UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$PathParts = $UserPath -split ";" | ForEach-Object { $_.TrimEnd("\") }
+if ($PathParts -notcontains $InstallDir.TrimEnd("\")) {
+    [Environment]::SetEnvironmentVariable("Path", "$InstallDir;$UserPath", "User")
+    Write-Host "Added $InstallDir to User PATH"
+}
+
+# Make available in the current session immediately
+$env:PATH = "$InstallDir;$env:PATH"
+
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "  1. Add $InstallDir to your PATH if not already there"
-Write-Host "  2. Run: verify-loop init"
-Write-Host "  3. That's it — checks run automatically on every Claude Write"
+Write-Host "  1. Run: verify-loop init"
+Write-Host "  2. That's it — checks run automatically on every Claude Write"
 Write-Host ""
 Write-Host "Quick start:"
 Write-Host "  verify-loop run src/app.ts     # manually check a file"
