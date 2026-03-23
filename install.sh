@@ -54,11 +54,41 @@ mv "$TMP" "${INSTALL_DIR}/verify-loop${EXT}"
 
 echo ""
 echo "Installed: ${INSTALL_DIR}/verify-loop${EXT}"
+
+# Register in PATH
+case ":$PATH:" in
+  *":${INSTALL_DIR}:"*) ;;
+  *)
+    if [ "$OS" = "windows" ]; then
+      WIN_DIR=$(cygpath -w "$INSTALL_DIR" 2>/dev/null || echo "$INSTALL_DIR")
+      powershell.exe -NoProfile -Command "\$p = [Environment]::GetEnvironmentVariable('Path', 'User'); \$d = '${WIN_DIR}'.TrimEnd('\\'); if ((\$p -split ';' | ForEach-Object { \$_.TrimEnd('\\') }) -notcontains \$d) { [Environment]::SetEnvironmentVariable('Path', \"\$d;\$p\", 'User'); Write-Host \"Added \$d to User PATH\" }"
+      export PATH="${INSTALL_DIR}:$PATH"
+    else
+      SHELL_NAME="$(basename "${SHELL:-}")"
+      case "$SHELL_NAME" in
+        zsh)  SHELL_RC="$HOME/.zshrc" ;;
+        bash) SHELL_RC="$HOME/.bashrc" ;;
+        *)    SHELL_RC="" ;;
+      esac
+      PATH_LINE="export PATH=\"${INSTALL_DIR}:\$PATH\""
+      if [ -n "$SHELL_RC" ]; then
+        if ! grep -qF "$INSTALL_DIR" "$SHELL_RC" 2>/dev/null; then
+          printf '\n# verify-loop\n%s\n' "$PATH_LINE" >> "$SHELL_RC"
+          echo "Added ${INSTALL_DIR} to PATH in $SHELL_RC"
+          echo "Reload your shell with: source $SHELL_RC"
+        fi
+      else
+        echo "NOTE: add ${INSTALL_DIR} to your PATH:"
+        echo "  $PATH_LINE"
+      fi
+    fi
+    ;;
+esac
+
 echo ""
 echo "Next steps:"
-echo "  1. Add ${INSTALL_DIR} to your PATH if not already there"
-echo "  2. Run: verify-loop init"
-echo "  3. That's it — checks run automatically on every Claude Write"
+echo "  1. Run: verify-loop init"
+echo "  2. That's it — checks run automatically on every Claude Write"
 echo ""
 echo "Quick start:"
 echo "  verify-loop run src/app.ts     # manually check a file"
