@@ -34,6 +34,7 @@ commit_parsers = [
     { message = "^fix: address PR", skip = true },
     { message = "^fix: resolve merge conflict", skip = true },
     { message = "^chore: update changelog", skip = true },
+    { message = "^ci", skip = true },
     { message = "^feat", group = "Features" },
     { message = "^fix", group = "Bug Fixes" },
     { message = "^docs", group = "Documentation" },
