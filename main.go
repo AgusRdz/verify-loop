@@ -35,8 +35,11 @@ func init() {
 
 func main() {
 	if len(os.Args) < 2 {
-		// No args — hook mode if stdin is a pipe, otherwise help.
-		if isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd()) {
+		// No args — try hook mode first (read stdin), fall back to help if stdin is a TTY.
+		// Note: on Windows, isatty can be unreliable when invoked by Claude Code, so we
+		// only skip hook mode if stdin is definitely a terminal on non-Windows platforms.
+		stdinIsTTY := isatty.IsTerminal(os.Stdin.Fd()) && !isatty.IsCygwinTerminal(os.Stdin.Fd())
+		if stdinIsTTY && runtime.GOOS != "windows" {
 			printHelp()
 			return
 		}
@@ -107,20 +110,45 @@ func main() {
 
 // runHook reads the PostToolUse JSON from stdin and runs checks on the written file.
 func runHook() {
+	// Suppress stderr — any output to stderr causes Claude Code to mark the hook as failed.
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err == nil {
+		os.Stderr = devNull
+	}
+
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		respond(fmt.Sprintf("verify-loop: failed to read stdin: %v", err))
 		return
 	}
 
+	// If stdin was empty (e.g. run from terminal with no args on Windows), show help.
+	if len(strings.TrimSpace(string(data))) == 0 {
+		printHelp()
+		return
+	}
+
 	var input struct {
-		Tool       string `json:"tool"`
-		ToolResult struct {
-			Path string `json:"path"`
-		} `json:"tool_result"`
+		ToolName  string `json:"tool_name"`
+		ToolInput struct {
+			FilePath string `json:"file_path"`
+		} `json:"tool_input"`
+		ToolResponse struct {
+			FilePath string `json:"filePath"`
+		} `json:"tool_response"`
 	}
 	if err := json.Unmarshal(data, &input); err != nil {
 		respond(fmt.Sprintf("verify-loop: invalid input JSON: %v", err))
+		return
+	}
+
+	// Resolve path: prefer tool_input.file_path, fallback to tool_response.filePath.
+	path := input.ToolInput.FilePath
+	if path == "" {
+		path = input.ToolResponse.FilePath
+	}
+	if path == "" {
+		respond("")
 		return
 	}
 
@@ -129,7 +157,7 @@ func runHook() {
 		return
 	}
 
-	respond(runFile(input.ToolResult.Path))
+	respond(runFile(path))
 }
 
 // runFile runs all configured checks on a single file and returns the compact output string.
@@ -239,9 +267,10 @@ func matchesSkipPath(relPath string, patterns []string) bool {
 
 // respond writes the PostToolUse JSON response to stdout.
 func respond(output string) {
-	resp := map[string]string{
-		"action": "continue",
-		"output": output,
+	resp := map[string]interface{}{}
+	if output != "" {
+		resp["additionalContext"] = output
+		resp["systemMessage"] = output
 	}
 	data, _ := json.Marshal(resp)
 	fmt.Println(string(data))

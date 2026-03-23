@@ -63,12 +63,16 @@ func Install(version string) {
 	postToolUse := getOrCreateSlice(hooksMap, "PostToolUse")
 	postToolUse = removeOurEntries(postToolUse)
 
+	// Use forward slashes and quote the path for Claude Code compatibility on Windows.
+	cmd := filepath.ToSlash(exe)
+	cmd = `"` + cmd + `"`
+
 	postToolUse = append(postToolUse, map[string]interface{}{
 		"matcher": "Write",
 		"hooks": []interface{}{
 			map[string]interface{}{
 				"type":    "command",
-				"command": exe,
+				"command": cmd,
 			},
 		},
 	})
