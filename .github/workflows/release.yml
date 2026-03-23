@@ -1,0 +1,140 @@
+name: Release
+run-name: Release ${{ github.ref_name }}
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Run tests
+        run: go test ./... -count=1
+
+      - name: Validate semver tag
+        run: |
+          if ! echo "${{ github.ref_name }}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: tag '${{ github.ref_name }}' is not valid semver"
+            exit 1
+          fi
+
+      - name: Update CHANGELOG.md
+        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72  # v4
+        with:
+          config: cliff.toml
+          args: --output CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@c93ef52f3d0ddcdcc9bd5447d98d458a11cd4f72  # v4
+        id: changelog
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build binaries
+        run: |
+          VERSION=${{ github.ref_name }}
+          LDFLAGS="-s -w -X main.version=${VERSION}"
+          CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_linux_amd64 .
+          CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_linux_arm64 .
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_darwin_amd64 .
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_darwin_arm64 .
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_windows_amd64.exe .
+
+      - name: Generate checksums
+        run: cd bin && sha256sum verify-loop_* > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.changelog.outputs.content }}
+          files: |
+            bin/verify-loop_linux_amd64
+            bin/verify-loop_linux_arm64
+            bin/verify-loop_darwin_amd64
+            bin/verify-loop_darwin_arm64
+            bin/verify-loop_windows_amd64.exe
+            bin/checksums.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: bin/verify-loop_*
+
+      - name: Update Homebrew formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          [ -z "${HOMEBREW_TAP_TOKEN}" ] && echo "HOMEBREW_TAP_TOKEN not set, skipping" && exit 0
+          VERSION=${{ github.ref_name }}
+          VER=${VERSION#v}
+          SHA_DARWIN_ARM64=$(sha256sum bin/verify-loop_darwin_arm64 | awk '{print $1}')
+          SHA_DARWIN_AMD64=$(sha256sum bin/verify-loop_darwin_amd64 | awk '{print $1}')
+          SHA_LINUX_AMD64=$(sha256sum bin/verify-loop_linux_amd64 | awk '{print $1}')
+          SHA_LINUX_ARM64=$(sha256sum bin/verify-loop_linux_arm64 | awk '{print $1}')
+          git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/agusrdz/homebrew-tap.git tap
+          cat > tap/Formula/verify-loop.rb << FORMULA
+          class VerifyLoop < Formula
+            desc "PostToolUse/Write hook for static analysis feedback in Claude Code"
+            homepage "https://github.com/agusrdz/verify-loop"
+            version "${VER}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/agusrdz/verify-loop/releases/download/${VERSION}/verify-loop_darwin_arm64"
+                sha256 "${SHA_DARWIN_ARM64}"
+              else
+                url "https://github.com/agusrdz/verify-loop/releases/download/${VERSION}/verify-loop_darwin_amd64"
+                sha256 "${SHA_DARWIN_AMD64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/agusrdz/verify-loop/releases/download/${VERSION}/verify-loop_linux_arm64"
+                sha256 "${SHA_LINUX_ARM64}"
+              else
+                url "https://github.com/agusrdz/verify-loop/releases/download/${VERSION}/verify-loop_linux_amd64"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+            end
+
+            def install
+              binary = Dir["verify-loop_*"].first
+              chmod 0755, binary
+              bin.install binary => "verify-loop"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/verify-loop --version")
+            end
+          end
+          FORMULA
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/verify-loop.rb
+          git commit -m "verify-loop ${VERSION}"
+          git push
