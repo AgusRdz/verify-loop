@@ -178,7 +178,7 @@ func runFile(path string) string {
 			parseFunc := check.ParseFunc(parse.Get(ccfg.Parse))
 			c = check.NewCommand(ccfg, proj.Root, parseFunc)
 		case ccfg.Builtin != "":
-			if ccfg.Builtin == "TSC" {
+			if ccfg.Builtin == "tsc" || ccfg.Builtin == "TSC" {
 				c = check.NewTSC(proj.Root, check.ParseFunc(parse.TSC))
 			} else if ccfg.Builtin == "eslint" && ccfg.FixOnClean {
 				c = check.NewESLintFixOnClean(check.ParseFunc(parse.ESLint))
