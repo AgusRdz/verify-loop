@@ -1,0 +1,12 @@
+services:
+  dev:
+    build: .
+    volumes:
+      - .:/app
+      - go-cache:/go/pkg
+      - go-build-cache:/root/.cache/go-build
+    working_dir: /app
+
+volumes:
+  go-cache:
+  go-build-cache:
