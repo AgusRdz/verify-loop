@@ -60,9 +60,17 @@ case ":$PATH:" in
   *":${INSTALL_DIR}:"*) ;;
   *)
     if [ "$OS" = "windows" ]; then
+      # Update Windows registry PATH for native tools
       WIN_DIR=$(cygpath -w "$INSTALL_DIR" 2>/dev/null || echo "$INSTALL_DIR")
-      powershell.exe -NoProfile -Command "\$p = [Environment]::GetEnvironmentVariable('Path', 'User'); \$d = '${WIN_DIR}'.TrimEnd('\\'); if ((\$p -split ';' | ForEach-Object { \$_.TrimEnd('\\') }) -notcontains \$d) { [Environment]::SetEnvironmentVariable('Path', \"\$d;\$p\", 'User'); Write-Host \"Added \$d to User PATH\" }"
-      export PATH="${INSTALL_DIR}:$PATH"
+      powershell.exe -NoProfile -Command "\$p = [Environment]::GetEnvironmentVariable('Path', 'User'); \$d = '${WIN_DIR}'.TrimEnd('\\'); if ((\$p -split ';' | ForEach-Object { \$_.TrimEnd('\\') }) -notcontains \$d) { [Environment]::SetEnvironmentVariable('Path', \"\$d;\$p\", 'User'); Write-Host \"Added \$d to User PATH (registry)\" }" 2>/dev/null || true
+      # Also write to .bashrc for Git Bash / MSYS sessions
+      SHELL_RC="$HOME/.bashrc"
+      PATH_LINE="export PATH=\"${INSTALL_DIR}:\$PATH\""
+      if ! grep -qF "$INSTALL_DIR" "$SHELL_RC" 2>/dev/null; then
+        printf '\n# verify-loop\n%s\n' "$PATH_LINE" >> "$SHELL_RC"
+        echo "Added ${INSTALL_DIR} to PATH in $SHELL_RC"
+      fi
+      echo "Reload your shell or run: source ~/.bashrc"
     else
       SHELL_NAME="$(basename "${SHELL:-}")"
       case "$SHELL_NAME" in
