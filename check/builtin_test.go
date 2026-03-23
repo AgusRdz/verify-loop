@@ -23,7 +23,7 @@ func TestGetRegistered(t *testing.T) {
 }
 
 func TestTSCName(t *testing.T) {
-	c := NewTSC("/tmp", noopParse)
+	c := NewTSC("/tmp", noopParse, false)
 	if c.Name() != "TSC" {
 		t.Errorf("expected TSC, got %q", c.Name())
 	}

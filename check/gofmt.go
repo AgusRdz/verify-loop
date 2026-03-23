@@ -1,11 +1,7 @@
 package check
 
 import (
-	"bytes"
-	"context"
 	"fmt"
-	"os/exec"
-	"runtime"
 	"time"
 )
 
@@ -23,33 +19,13 @@ func NewGoFmt(parseFunc ParseFunc) *GoFmtChecker {
 func (c *GoFmtChecker) Name() string { return "FMT" }
 
 func (c *GoFmtChecker) Run(file string, timeout time.Duration) Result {
-	cmdStr := fmt.Sprintf("gofmt -l %s", file)
-
-	var shell, shellFlag string
-	if runtime.GOOS == "windows" {
-		shell, shellFlag = "cmd", "/c"
-	} else {
-		shell, shellFlag = "sh", "-c"
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, shell, shellFlag, cmdStr)
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-
-	runErr := cmd.Run()
-	if ctx.Err() == context.DeadlineExceeded {
+	output, timed, runErr := runCmd(fmt.Sprintf("gofmt -l %s", file), "", timeout)
+	if timed {
 		return Result{Name: "FMT", Timed: true}
 	}
-
-	output := buf.String()
 	if runErr != nil && output == "" {
 		return Result{Name: "FMT", Err: runErr}
 	}
-
 	issues := c.parseFunc(output, file)
 	return Result{Name: "FMT", Issues: issues}
 }

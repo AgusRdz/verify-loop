@@ -9,13 +9,14 @@ import (
 )
 
 type CheckerConfig struct {
-	Name       string   `yaml:"name"`
-	Builtin    string   `yaml:"builtin,omitempty"`
-	Command    string   `yaml:"command,omitempty"`
-	Flags      []string `yaml:"flags,omitempty"`
-	Parse      string   `yaml:"parse,omitempty"`
-	Scope      string   `yaml:"scope,omitempty"` // "file" (default) or "project"
-	FixOnClean bool     `yaml:"fix_on_clean,omitempty"`
+	Name        string   `yaml:"name"`
+	Builtin     string   `yaml:"builtin,omitempty"`
+	Command     string   `yaml:"command,omitempty"`
+	Flags       []string `yaml:"flags,omitempty"`
+	Parse       string   `yaml:"parse,omitempty"`
+	Scope       string   `yaml:"scope,omitempty"` // "file" (default) or "project"
+	FixOnClean  bool     `yaml:"fix_on_clean,omitempty"`
+	Incremental bool     `yaml:"incremental,omitempty"` // tsc: use --incremental flag
 }
 
 type Config struct {
@@ -32,12 +33,12 @@ func defaults() *Config {
 		TimeoutSeconds: 30,
 		Checkers: map[string][]CheckerConfig{
 			".ts": {
-				{Name: "TSC", Builtin: "tsc", Flags: []string{"--noEmit"}, Scope: "project"},
-				{Name: "LINT", Builtin: "eslint", Flags: []string{"--max-warnings", "0"}},
+				{Name: "TSC", Builtin: "tsc", Scope: "project", Incremental: true},
+				{Name: "LINT", Builtin: "eslint"},
 			},
 			".tsx": {
-				{Name: "TSC", Builtin: "tsc", Flags: []string{"--noEmit"}, Scope: "project"},
-				{Name: "LINT", Builtin: "eslint", Flags: []string{"--max-warnings", "0"}},
+				{Name: "TSC", Builtin: "tsc", Scope: "project", Incremental: true},
+				{Name: "LINT", Builtin: "eslint"},
 			},
 			".js": {
 				{Name: "LINT", Builtin: "eslint"},

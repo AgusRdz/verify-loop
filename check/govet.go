@@ -1,11 +1,7 @@
 package check
 
 import (
-	"bytes"
-	"context"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"time"
 )
 
@@ -23,32 +19,13 @@ func NewGoVet(parseFunc ParseFunc) *GoVetChecker {
 func (c *GoVetChecker) Name() string { return "VET" }
 
 func (c *GoVetChecker) Run(file string, timeout time.Duration) Result {
-	var shell, shellFlag string
-	if runtime.GOOS == "windows" {
-		shell, shellFlag = "cmd", "/c"
-	} else {
-		shell, shellFlag = "sh", "-c"
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, shell, shellFlag, "go vet .")
-	cmd.Dir = filepath.Dir(file)
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-
-	runErr := cmd.Run()
-	if ctx.Err() == context.DeadlineExceeded {
+	output, timed, runErr := runCmd("go vet .", filepath.Dir(file), timeout)
+	if timed {
 		return Result{Name: "VET", Timed: true}
 	}
-
-	output := buf.String()
 	if runErr != nil && output == "" {
 		return Result{Name: "VET", Err: runErr}
 	}
-
 	issues := c.parseFunc(output, file)
 	return Result{Name: "VET", Issues: issues}
 }

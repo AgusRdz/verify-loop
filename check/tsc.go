@@ -2,11 +2,8 @@ package check
 
 import (
 	"bytes"
-	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"time"
 )
 
@@ -15,54 +12,85 @@ import (
 type TSCChecker struct {
 	projectRoot string
 	parseFunc   ParseFunc
+	incremental bool
 }
 
 // NewTSC creates a TSCChecker for the given project root and parse function.
 // parseFunc is typically parse.TSC, injected from main to avoid import cycles.
-func NewTSC(projectRoot string, parseFunc ParseFunc) *TSCChecker {
-	return &TSCChecker{projectRoot: projectRoot, parseFunc: parseFunc}
+func NewTSC(projectRoot string, parseFunc ParseFunc, incremental bool) *TSCChecker {
+	return &TSCChecker{projectRoot: projectRoot, parseFunc: parseFunc, incremental: incremental}
 }
 
 func (c *TSCChecker) Name() string { return "TSC" }
 
+// ensureGitignore adds entry to .gitignore in projectRoot if not already present.
+func ensureGitignore(projectRoot, entry string) {
+	gitignore := filepath.Join(projectRoot, ".gitignore")
+	data, err := os.ReadFile(gitignore)
+	if err != nil && !os.IsNotExist(err) {
+		return
+	}
+	// Check if entry already exists.
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		if string(bytes.TrimSpace(line)) == entry {
+			return
+		}
+	}
+	// Append the entry.
+	f, err := os.OpenFile(gitignore, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	// Ensure we start on a new line.
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		f.WriteString("\n") //nolint
+	}
+	f.WriteString(entry + "\n") //nolint
+}
+
+// tscBin returns the local tsc binary if present, falling back to the global one.
+func tscBin(projectRoot string) string {
+	candidates := []string{
+		filepath.Join(projectRoot, "node_modules", ".bin", "tsc"),
+		filepath.Join(projectRoot, "node_modules", ".bin", "tsc.cmd"),
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "tsc"
+}
+
 func (c *TSCChecker) Run(file string, timeout time.Duration) Result {
-	// Decide whether to use --incremental based on .tsbuildinfo presence.
+	tsc := tscBin(c.projectRoot)
+
+	// Always use --incremental (config opt-in or default behavior).
+	// If .tsbuildinfo doesn't exist yet, ensure *.tsbuildinfo is in .gitignore
+	// so the generated cache file is never accidentally committed.
 	tsbuildinfo := filepath.Join(c.projectRoot, ".tsbuildinfo")
-	var cmdStr string
-	if _, err := os.Stat(tsbuildinfo); err == nil {
-		cmdStr = "tsc --noEmit --incremental"
+	if _, err := os.Stat(tsbuildinfo); err != nil {
+		ensureGitignore(c.projectRoot, "*.tsbuildinfo")
+	}
+
+	cmdStr := tsc + " --noEmit"
+	if c.incremental {
+		cmdStr += " --incremental"
 	} else {
-		cmdStr = "tsc --noEmit"
+		// Auto-detect: use --incremental if .tsbuildinfo already exists.
+		if _, err := os.Stat(tsbuildinfo); err == nil {
+			cmdStr += " --incremental"
+		}
 	}
 
-	var shell, shellFlag string
-	if runtime.GOOS == "windows" {
-		shell, shellFlag = "cmd", "/c"
-	} else {
-		shell, shellFlag = "sh", "-c"
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, shell, shellFlag, cmdStr)
-	if c.projectRoot != "" {
-		cmd.Dir = c.projectRoot
-	}
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-
-	runErr := cmd.Run()
-	if ctx.Err() == context.DeadlineExceeded {
+	output, timed, runErr := runCmd(cmdStr, c.projectRoot, timeout)
+	if timed {
 		return Result{Name: "TSC", Timed: true}
 	}
-
-	output := buf.String()
 	if runErr != nil && output == "" {
 		return Result{Name: "TSC", Err: runErr}
 	}
-
 	issues := c.parseFunc(output, file)
 	return Result{Name: "TSC", Issues: issues}
 }
