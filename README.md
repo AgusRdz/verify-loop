@@ -77,6 +77,10 @@ VERIFY src/services/auth.ts
 | `verify-loop enable` | Resume checks after disabling |
 | `verify-loop disable` | Bypass all checks globally (hook still fires, outputs nothing) |
 | `verify-loop config show` | Show resolved config for current directory |
+| `verify-loop gitignore local` | Add `*.tsbuildinfo` to local `.gitignore` (default) |
+| `verify-loop gitignore global` | Add `*.tsbuildinfo` to global gitignore, remove from local |
+| `verify-loop update` | Update verify-loop to the latest release |
+| `verify-loop auto-update [on\|off]` | Enable/disable silent background updates |
 | `verify-loop version` | Show version |
 | `verify-loop help` | Show help |
 
@@ -89,6 +93,11 @@ Config is layered: built-in defaults → global (`~/.config/verify-loop/config.y
 
 # Max seconds per checker before emitting a timeout warning. Default: 30.
 timeout_seconds: 30
+
+# Where to add *.tsbuildinfo — "local" (default) adds to .gitignore in the project root,
+# "global" adds to the git global excludesFile (~/.gitignore_global) and removes from local.
+# Set once via: verify-loop gitignore [local|global]
+tsbuildinfo_gitignore: local
 
 # Include warnings in output (default: errors only).
 include_warnings: false
