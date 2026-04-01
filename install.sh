@@ -31,7 +31,7 @@ esac
 EXT=""
 if [ "$OS" = "windows" ]; then EXT=".exe"; fi
 
-BINARY="verify-loop_${OS}_${ARCH}${EXT}"
+BINARY="verify-loop-${OS}-${ARCH}${EXT}"
 
 if [ -z "$VERIFY_LOOP_VERSION" ]; then
   VERIFY_LOOP_VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"//;s/".*//')

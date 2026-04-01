@@ -9,7 +9,7 @@ $Arch = if ([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitec
     "amd64"
 }
 
-$Binary = "verify-loop_windows_$Arch.exe"
+$Binary = "verify-loop-windows-$Arch.exe"
 
 if (-not $env:VERIFY_LOOP_VERSION) {
     $Release = Invoke-RestMethod "https://api.github.com/repos/$Repo/releases/latest"
