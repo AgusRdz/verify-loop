@@ -16,6 +16,7 @@ import (
 	"github.com/agusrdz/verify-loop/format"
 	"github.com/agusrdz/verify-loop/hooks"
 	"github.com/agusrdz/verify-loop/parse"
+	"github.com/agusrdz/verify-loop/updater"
 	"github.com/mattn/go-isatty"
 )
 
@@ -34,6 +35,9 @@ func init() {
 }
 
 func main() {
+	updater.ApplyPendingUpdate(version)
+	updater.NotifyIfUpdateAvailable(version)
+
 	if len(os.Args) < 2 {
 		// No args — try hook mode first (read stdin), fall back to help if stdin is a TTY.
 		// Note: on Windows, isatty can be unreliable when invoked by Claude Code, so we
@@ -105,10 +109,24 @@ func main() {
 			os.Exit(1)
 		}
 
+	case "update":
+		updater.Run(version)
+
+	case "auto-update":
+		runAutoUpdate(os.Args[2:])
+
+	case "--_bg-update":
+		if len(os.Args) >= 3 {
+			updater.RunBackgroundUpdate(os.Args[2])
+		}
+		return
+
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command %q\nrun 'verify-loop help' for usage\n", os.Args[1])
 		os.Exit(1)
 	}
+
+	updater.BackgroundCheck(version)
 }
 
 // runHook reads the PostToolUse JSON from stdin and runs checks on the written file.
@@ -340,6 +358,44 @@ func runGitignore() {
 	fmt.Printf("  preference saved to %s\n", config.Path())
 }
 
+func runAutoUpdate(args []string) {
+	if len(args) == 0 {
+		if updater.IsAutoUpdateEnabled() {
+			fmt.Println("auto-update: on")
+		} else {
+			fmt.Println("auto-update: off")
+			fmt.Println("verify-loop will notify you when updates are available")
+			fmt.Println("run 'verify-loop auto-update on' to enable automatic updates")
+		}
+		return
+	}
+	switch args[0] {
+	case "on":
+		if updater.IsAutoUpdateEnabled() {
+			fmt.Println("auto-update is already on")
+			return
+		}
+		if err := updater.SetAutoUpdate(true); err != nil {
+			fmt.Fprintf(os.Stderr, "verify-loop: failed to enable auto-update: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("auto-update enabled — verify-loop will update itself in the background")
+	case "off":
+		if !updater.IsAutoUpdateEnabled() {
+			fmt.Println("auto-update is already off")
+			return
+		}
+		if err := updater.SetAutoUpdate(false); err != nil {
+			fmt.Fprintf(os.Stderr, "verify-loop: failed to disable auto-update: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("auto-update disabled — run 'verify-loop update' to update manually")
+	default:
+		fmt.Fprintf(os.Stderr, "unknown auto-update subcommand %q\nusage: verify-loop auto-update [on|off]\n", args[0])
+		os.Exit(1)
+	}
+}
+
 func runDoctor() {
 	issues := 0
 
@@ -437,6 +493,8 @@ func printHelp() {
 	b.WriteString(row("config show", "Show resolved config for current directory"))
 	b.WriteString(row("gitignore local", "Add *.tsbuildinfo to local .gitignore (default)"))
 	b.WriteString(row("gitignore global", "Add *.tsbuildinfo to global gitignore, remove from local"))
+	b.WriteString(row("update", "Update verify-loop to the latest release"))
+	b.WriteString(row("auto-update [on|off]", "Enable/disable silent background updates"))
 	b.WriteString("\n")
 
 	b.WriteString(section("Debug"))

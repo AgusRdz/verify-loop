@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -55,31 +57,44 @@ jobs:
         run: |
           VERSION=${{ github.ref_name }}
           LDFLAGS="-s -w -X main.version=${VERSION}"
-          CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_linux_amd64 .
-          CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_linux_arm64 .
-          CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_darwin_amd64 .
-          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_darwin_arm64 .
-          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop_windows_amd64.exe .
+          CGO_ENABLED=0 GOOS=linux   GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop-linux-amd64 .
+          CGO_ENABLED=0 GOOS=linux   GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop-linux-arm64 .
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop-darwin-amd64 .
+          CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop-darwin-arm64 .
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o bin/verify-loop-windows-amd64.exe .
 
       - name: Generate checksums
-        run: cd bin && sha256sum verify-loop_* > checksums.txt
+        run: cd bin && sha256sum verify-loop-* > checksums.txt
+
+      - name: Sign checksums
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          echo "$SIGNING_KEY" | base64 -d > /tmp/signing.pem
+          openssl pkey -in /tmp/signing.pem -noout
+          openssl pkeyutl -sign -inkey /tmp/signing.pem -rawin -in bin/checksums.txt \
+            | xxd -p -c 256 | tr -d '\n' > bin/checksums.txt.sig
+          rm /tmp/signing.pem
+          [ -s bin/checksums.txt.sig ] || { echo "ERROR: checksums.txt.sig is empty — signing failed"; exit 1; }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.changelog.outputs.content }}
           files: |
-            bin/verify-loop_linux_amd64
-            bin/verify-loop_linux_arm64
-            bin/verify-loop_darwin_amd64
-            bin/verify-loop_darwin_arm64
-            bin/verify-loop_windows_amd64.exe
+            bin/verify-loop-linux-amd64
+            bin/verify-loop-linux-arm64
+            bin/verify-loop-darwin-amd64
+            bin/verify-loop-darwin-arm64
+            bin/verify-loop-windows-amd64.exe
             bin/checksums.txt
+            bin/checksums.txt.sig
 
-      # - name: Attest build provenance
-      #   uses: actions/attest-build-provenance@v2
-      #   with:
-      #     subject-path: bin/verify-loop_*
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: bin/verify-loop-*
 
       # - name: Update Homebrew formula
       #   env:
@@ -88,17 +103,10 @@ jobs:
       #     [ -z "${HOMEBREW_TAP_TOKEN}" ] && echo "HOMEBREW_TAP_TOKEN not set, skipping" && exit 0
       #     VERSION=${{ github.ref_name }}
       #     VER=${VERSION#v}
-      #     SHA_DARWIN_ARM64=$(sha256sum bin/verify-loop_darwin_arm64 | awk '{print $1}')
-      #     SHA_DARWIN_AMD64=$(sha256sum bin/verify-loop_darwin_amd64 | awk '{print $1}')
-      #     SHA_LINUX_AMD64=$(sha256sum bin/verify-loop_linux_amd64 | awk '{print $1}')
-      #     SHA_LINUX_ARM64=$(sha256sum bin/verify-loop_linux_arm64 | awk '{print $1}')
-      #     git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/agusrdz/homebrew-tap.git tap
-      #     cat > tap/Formula/verify-loop.rb << FORMULA
+      #     SHA_DARWIN_ARM64=$(sha256sum bin/verify-loop-darwin-arm64 | awk '{print $1}')
+      #     SHA_DARWIN_AMD64=$(sha256sum bin/verify-loop-darwin-amd64 | awk '{print $1}')
+      #     SHA_LINUX_AMD64=$(sha256sum bin/verify-loop-linux-amd64 | awk '{print $1}')
+      #     SHA_LINUX_ARM64=$(sha256sum bin/verify-loop-linux-arm64 | awk '{print $1}')
+      #     git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/AgusRdz/homebrew-tap.git tap
       #     ...
-      #     FORMULA
-      #     cd tap
-      #     git config user.name "github-actions[bot]"
-      #     git config user.email "github-actions[bot]@users.noreply.github.com"
-      #     git add Formula/verify-loop.rb
-      #     git commit -m "verify-loop ${VERSION}"
-      #     git push
+      #     cd tap && git add Formula/verify-loop.rb && git commit -m "verify-loop ${VERSION}" && git push
