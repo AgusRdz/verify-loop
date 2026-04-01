@@ -93,6 +93,9 @@ func main() {
 		}
 		fmt.Print(runFile(os.Args[2]))
 
+	case "gitignore":
+		runGitignore()
+
 	case "config":
 		if len(os.Args) < 3 || os.Args[2] == "show" {
 			cwd, _ := os.Getwd()
@@ -207,7 +210,7 @@ func runFile(path string) string {
 			c = check.NewCommand(ccfg, proj.Root, parseFunc)
 		case ccfg.Builtin != "":
 			if ccfg.Builtin == "tsc" || ccfg.Builtin == "TSC" {
-				c = check.NewTSC(proj.Root, check.ParseFunc(parse.TSC), ccfg.Incremental)
+				c = check.NewTSC(proj.Root, check.ParseFunc(parse.TSC), ccfg.Incremental, cfg.TsbuildInfoGitignore)
 			} else if ccfg.Builtin == "eslint" {
 				c = check.NewESLintWithRoot(proj.Root, check.ParseFunc(parse.ESLint), ccfg.FixOnClean)
 			} else {
@@ -312,6 +315,31 @@ func runUninstall() {
 	fmt.Println("\nbinary not removed — delete manually or via your package manager")
 }
 
+func runGitignore() {
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "usage: verify-loop gitignore [local|global]")
+		os.Exit(1)
+	}
+	mode := os.Args[2]
+	if mode != "local" && mode != "global" {
+		fmt.Fprintf(os.Stderr, "unknown mode %q\nusage: verify-loop gitignore [local|global]\n", mode)
+		os.Exit(1)
+	}
+	if err := config.SaveGlobal(&config.Config{TsbuildInfoGitignore: mode}); err != nil {
+		fmt.Fprintf(os.Stderr, "verify-loop: failed to save config: %v\n", err)
+		os.Exit(1)
+	}
+	if mode == "global" {
+		check.ApplyGlobalGitignore("*.tsbuildinfo")
+		fmt.Println("*.tsbuildinfo added to global gitignore")
+		fmt.Printf("  global: %s\n", check.GlobalGitignorePath())
+		fmt.Println("  removed from local .gitignore (if present)")
+	} else {
+		fmt.Println("*.tsbuildinfo will be added to local .gitignore on next TSC run")
+	}
+	fmt.Printf("  preference saved to %s\n", config.Path())
+}
+
 func runDoctor() {
 	issues := 0
 
@@ -407,6 +435,8 @@ func printHelp() {
 	b.WriteString(row("doctor", "Check hook, config, and binary health"))
 	b.WriteString(row("enable / disable", "Resume or bypass verify-loop globally"))
 	b.WriteString(row("config show", "Show resolved config for current directory"))
+	b.WriteString(row("gitignore local", "Add *.tsbuildinfo to local .gitignore (default)"))
+	b.WriteString(row("gitignore global", "Add *.tsbuildinfo to global gitignore, remove from local"))
 	b.WriteString("\n")
 
 	b.WriteString(section("Debug"))

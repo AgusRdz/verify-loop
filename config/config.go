@@ -20,11 +20,12 @@ type CheckerConfig struct {
 }
 
 type Config struct {
-	Enabled        bool                       `yaml:"enabled"`
-	TimeoutSeconds int                        `yaml:"timeout_seconds"`
-	IncludeWarnings bool                      `yaml:"include_warnings"`
-	Checkers       map[string][]CheckerConfig `yaml:"checkers"`
-	SkipPaths      []string                   `yaml:"skip_paths"`
+	Enabled                bool                       `yaml:"enabled"`
+	TimeoutSeconds         int                        `yaml:"timeout_seconds"`
+	IncludeWarnings        bool                       `yaml:"include_warnings"`
+	Checkers               map[string][]CheckerConfig `yaml:"checkers"`
+	SkipPaths              []string                   `yaml:"skip_paths"`
+	TsbuildInfoGitignore   string                     `yaml:"tsbuildinfo_gitignore,omitempty"` // "local" (default) or "global"
 }
 
 func defaults() *Config {
@@ -114,6 +115,25 @@ func Load(projectDir string) (*Config, error) {
 	return cfg, nil
 }
 
+// SaveGlobal writes a partial config to the global config file, merging with
+// any existing content. Only non-zero fields in patch are written.
+func SaveGlobal(patch *Config) error {
+	path := Path()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	existing := &Config{}
+	if data, err := os.ReadFile(path); err == nil {
+		_ = yaml.Unmarshal(data, existing)
+	}
+	merge(existing, patch)
+	data, err := yaml.Marshal(existing)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
 func Show(projectDir string) {
 	cfg, err := Load(projectDir)
 	if err != nil {
@@ -143,5 +163,8 @@ func merge(base, override *Config) {
 	}
 	if len(override.SkipPaths) > 0 {
 		base.SkipPaths = append(base.SkipPaths, override.SkipPaths...)
+	}
+	if override.TsbuildInfoGitignore != "" {
+		base.TsbuildInfoGitignore = override.TsbuildInfoGitignore
 	}
 }
