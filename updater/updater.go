@@ -22,7 +22,7 @@ var httpClient = &http.Client{
 }
 
 // publicKey is the hex-encoded Ed25519 public key used to verify release signatures.
-const publicKey = "d21047a328e7332b86dd2535ea4407d1454cd489a7abb0c89be58a2ad0397cbc"
+const publicKey = "c94b203bfd4fb89155181931ce8910075a7f2f1f71acb3d58b720b0768c8375c"
 
 type ghRelease struct {
 	TagName string `json:"tag_name"`
