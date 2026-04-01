@@ -71,6 +71,7 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
           set -euo pipefail
+          [ -z "${SIGNING_KEY}" ] && { echo "ERROR: SIGNING_KEY secret is not set"; exit 1; }
           echo "$SIGNING_KEY" | base64 -d > /tmp/signing.pem
           openssl pkey -in /tmp/signing.pem -noout
           openssl pkeyutl -sign -inkey /tmp/signing.pem -rawin -in bin/checksums.txt \
